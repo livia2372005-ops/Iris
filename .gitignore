@@ -16,6 +16,7 @@ iris_trace.db*
 
 # Cloned demo repositories
 examples/cloned_flask/
+examples/cloned_rich/
 
 # Python & Build Artifacts
 __pycache__/

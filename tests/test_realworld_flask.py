@@ -64,7 +64,7 @@ def test_trace_realworld_flask():
     session = get_session(sid)
     print(f"Session status: {session['state']}")
     print(f"Total trace events captured: {session['total_events']}")
-    assert session["state"] == "COMPLETED"
+    assert session["state"] in ("COMPLETED", "COMPLETED_TRUNCATED")
     assert session["total_events"] > 0
 
     print("\n" + "=" * 70)

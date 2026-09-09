@@ -70,6 +70,8 @@ class IrisASGIMiddleware:
 
         target_func = headers_dict.get("x-iris-target") or self.default_target_function or scope.get("path", "handler")
         target_file = headers_dict.get("x-iris-file") or self.default_target_file or "app"
+        if ":" in target_func:
+            target_file, target_func = target_func.split(":", 1)
         condition = headers_dict.get("x-iris-condition")
 
         # Arm session in SQLite

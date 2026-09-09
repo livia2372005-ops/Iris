@@ -69,6 +69,8 @@ class IrisWSGIMiddleware:
             or environ.get("PATH_INFO", "handler")
         )
         target_file = environ.get("HTTP_X_IRIS_FILE") or self.default_target_file or "app"
+        if ":" in target_func:
+            target_file, target_func = target_func.split(":", 1)
         condition = environ.get("HTTP_X_IRIS_CONDITION")
 
         # Arm session in SQLite
