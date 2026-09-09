@@ -68,20 +68,26 @@ def trace(
     return decorator
 
 
+from iris.storage.db import arm_session, get_all_armed_sessions, get_latest_armed_session, init_db
+
+
 def auto_attach_from_db() -> Optional[IrisObserver]:
-    """Check the database for any pending ARMED session and attach observer."""
+    """Check the database for any pending ARMED sessions and attach observer."""
     init_db()
-    armed = get_latest_armed_session()
-    if not armed:
+    all_armed = get_all_armed_sessions()
+    if not all_armed:
         return None
 
-    coordinator = SessionCoordinator(
-        session_id=armed["session_id"],
-        entry_file=armed["entry_file"],
-        entry_function=armed["entry_function"],
-    )
+    coordinators = [
+        SessionCoordinator(
+            session_id=armed["session_id"],
+            entry_file=armed["entry_file"],
+            entry_function=armed["entry_function"],
+        )
+        for armed in all_armed
+    ]
     event_queue = EventQueue()
-    observer = IrisObserver(coordinator=coordinator, event_queue=event_queue)
+    observer = IrisObserver(coordinators=coordinators, event_queue=event_queue)
     observer.attach()
     return observer
 

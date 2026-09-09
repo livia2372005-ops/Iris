@@ -10,13 +10,13 @@ _active_observer: Optional[IrisObserver] = None
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Hook called when pytest starts. Automatically hooks into active ARMED session."""
+    """Hook called when pytest starts. Automatically hooks into active ARMED session(s)."""
     global _active_observer
     _active_observer = auto_attach_from_db()
     if _active_observer:
-        sid = _active_observer.coordinator.session_id
-        target = f"{_active_observer.coordinator.entry_function} in {_active_observer.coordinator.entry_file}"
-        print(f"\n[Iris] Auto-attached flight recorder for session '{sid}' (Target: {target})")
+        for sid, coord in _active_observer.coordinators.items():
+            target = f"{coord.entry_function} in {coord.entry_file}"
+            print(f"\n[Iris] Auto-attached flight recorder for session '{sid}' (Target: {target})")
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
@@ -24,7 +24,8 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     global _active_observer
     if _active_observer:
         _active_observer.detach()
-        if _active_observer.coordinator.is_active():
-            _active_observer._finalize_session(truncated=False)
+        for coord in _active_observer.coordinators.values():
+            if coord.is_active():
+                _active_observer._finalize_session(coordinator=coord, truncated=False)
         _active_observer.queue.stop()
         _active_observer = None

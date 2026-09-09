@@ -227,6 +227,14 @@ def get_latest_armed_session(
     db_path: Optional[Path] = None,
 ) -> Optional[Dict[str, Any]]:
     """Retrieve the latest pending session that is in ARMED state."""
+    all_armed = get_all_armed_sessions(db_path)
+    return all_armed[-1] if all_armed else None
+
+
+def get_all_armed_sessions(
+    db_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Retrieve all pending sessions that are in ARMED state."""
     conn = get_connection(db_path)
     try:
         cursor = conn.execute(
@@ -234,14 +242,10 @@ def get_latest_armed_session(
             SELECT session_id, entry_file, entry_function, state
             FROM sessions
             WHERE state = 'ARMED'
-            ORDER BY rowid DESC
-            LIMIT 1
+            ORDER BY rowid ASC
             """
         )
-        row = cursor.fetchone()
-        if not row:
-            return None
-        return dict(row)
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
