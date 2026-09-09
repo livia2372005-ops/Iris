@@ -202,36 +202,45 @@ class IrisObserver:
             coords_snapshot = list(self.coordinators.values())
 
         for coord in coords_snapshot:
-            if coord.state == SessionState.ARMED and coord.matches_entry(filename, func_name):
-                root_id = f"exec_{uuid.uuid4().hex[:12]}"
-                coord.transition_to_tracing(root_id)
+            if coord.state == SessionState.ARMED:
+                frame_locals = None
+                if coord.condition:
+                    try:
+                        frame = sys._getframe(1)
+                        frame_locals = frame.f_locals
+                    except Exception:
+                        frame_locals = {}
 
-                with self._lock:
-                    self._parent_map[root_id] = None
-                    self._prev_locals[root_id] = {}
+                if coord.matches_entry(filename, func_name, frame_locals):
+                    root_id = f"exec_{uuid.uuid4().hex[:12]}"
+                    coord.transition_to_tracing(root_id)
 
-                self._current_context_var.set((coord.session_id, root_id))
+                    with self._lock:
+                        self._parent_map[root_id] = None
+                        self._prev_locals[root_id] = {}
 
-                # Elevate events to full tracing
-                all_events = self._monitoring_provider.get_tracing_events_mask()
-                sys.monitoring.set_events(TOOL_ID, all_events)
+                    self._current_context_var.set((coord.session_id, root_id))
 
-                now_ns = time.monotonic_ns()
-                self.queue.put_execution_start(
-                    execution_id=root_id,
-                    session_id=coord.session_id,
-                    parent_execution_id=None,
-                    function_name=func_name,
-                    file_path=filename,
-                    start_time_mono_ns=now_ns,
-                    async_task_id=task_id,
-                )
-                self.queue.put_session_update(
-                    session_id=coord.session_id,
-                    state=SessionState.TRACING.value,
-                    start_time_mono_ns=now_ns,
-                )
-                return
+                    # Elevate events to full tracing
+                    all_events = self._monitoring_provider.get_tracing_events_mask()
+                    sys.monitoring.set_events(TOOL_ID, all_events)
+
+                    now_ns = time.monotonic_ns()
+                    self.queue.put_execution_start(
+                        execution_id=root_id,
+                        session_id=coord.session_id,
+                        parent_execution_id=None,
+                        function_name=func_name,
+                        file_path=filename,
+                        start_time_mono_ns=now_ns,
+                        async_task_id=task_id,
+                    )
+                    self.queue.put_session_update(
+                        session_id=coord.session_id,
+                        state=SessionState.TRACING.value,
+                        start_time_mono_ns=now_ns,
+                    )
+                    return
 
         # Case 2: Currently TRACING, record nested sub-call
         ctx = self._current_context_var.get()

@@ -9,6 +9,7 @@ from mcp.server.mcpserver import MCPServer
 
 from iris.storage.db import (
     arm_session,
+    diagnose_session,
     get_db_path,
     get_session,
     init_db,
@@ -29,6 +30,7 @@ def create_server() -> MCPServer:
         name="iris_arm_entry",
         description=(
             "Arm an entry point (file and function) for observation. "
+            "Supports optional predicate condition evaluated at function entry (PY_START). "
             "When the target application or test reaches this entry point, "
             "Iris will record the execution tree without pausing execution."
         ),
@@ -36,6 +38,7 @@ def create_server() -> MCPServer:
     def iris_arm_entry(
         entry_file: str,
         entry_function: str,
+        condition: Optional[str] = None,
         timeout_seconds: int = 60,
     ) -> Dict[str, Any]:
         """Arm an entry point for tracing.
@@ -43,6 +46,7 @@ def create_server() -> MCPServer:
         Args:
             entry_file: Path or filename of the target entry script (e.g. 'app/routes.py').
             entry_function: Name of the target entry function (e.g. 'handle_chat').
+            condition: Optional Python expression evaluated against function arguments (e.g. 'user_id == 42').
             timeout_seconds: Maximum duration in seconds to wait for entry trigger.
 
         Returns:
@@ -54,18 +58,21 @@ def create_server() -> MCPServer:
             session_id=session_id,
             entry_file=entry_file,
             entry_function=entry_function,
+            condition=condition,
             timeout_seconds=timeout_seconds,
         )
         return {
             "session_id": session_id,
             "entry_file": entry_file,
             "entry_function": entry_function,
+            "condition": condition,
             "state": "ARMED",
             "timeout_seconds": timeout_seconds,
             "database_path": str(get_db_path()),
             "message": (
-                f"Session '{session_id}' is now ARMED for {entry_function} in {entry_file}. "
-                "Trigger your application or test suite now."
+                f"Session '{session_id}' is now ARMED for {entry_function} in {entry_file}"
+                + (f" with condition [{condition}]." if condition else ".")
+                + " Trigger your application or test suite now."
             ),
         }
 
@@ -165,6 +172,25 @@ def create_server() -> MCPServer:
             limit=limit,
             cursor=cursor,
         )
+
+    @server.tool(
+        name="iris_diagnose_anomaly",
+        description=(
+            "Diagnose anomalies, collapse repetitive loops, detect unexpected variable "
+            "type mutations, and locate exception root causes in a recorded session. "
+            "Returns a token-optimized markdown summary for rapid AI root-cause reasoning."
+        ),
+    )
+    def iris_diagnose_anomaly(session_id: str) -> Dict[str, Any]:
+        """Run intelligent trace diagnostics and loop compression on a session.
+
+        Args:
+            session_id: The ID of the session to diagnose.
+
+        Returns:
+            Dict containing session diagnostics, compressed loops, and markdown report.
+        """
+        return diagnose_session(session_id=session_id)
 
     return server
 

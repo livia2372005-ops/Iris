@@ -30,11 +30,13 @@ class SessionCoordinator:
         session_id: str,
         entry_file: str,
         entry_function: str,
+        condition: Optional[str] = None,
         timeout_seconds: int = 60,
     ):
         self.session_id = session_id
         self.entry_file = self._normalize_path(entry_file)
         self.entry_function = entry_function
+        self.condition = condition.strip() if condition else None
         self.timeout_seconds = timeout_seconds
 
         self.state: SessionState = SessionState.ARMED
@@ -49,8 +51,13 @@ class SessionCoordinator:
         """Normalize file paths for consistent comparison across platforms."""
         return Path(path_str).name.lower()
 
-    def matches_entry(self, code_filename: str, func_name: str) -> bool:
-        """Check whether the executed function matches the armed entry target."""
+    def matches_entry(
+        self,
+        code_filename: str,
+        func_name: str,
+        frame_locals: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Check whether the executed function matches the armed entry target and condition."""
         if self.state != SessionState.ARMED:
             return False
 
@@ -59,10 +66,35 @@ class SessionCoordinator:
 
         # Match filename or basename
         code_file_norm = Path(code_filename).name.lower()
-        if self.entry_file in code_file_norm or code_file_norm in self.entry_file:
-            return True
+        if not (self.entry_file in code_file_norm or code_file_norm in self.entry_file):
+            return False
 
-        return False
+        # Evaluate condition if defined
+        if self.condition:
+            if not frame_locals:
+                return False
+            safe_builtins = {
+                "len": len,
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "abs": abs,
+                "min": min,
+                "max": max,
+                "isinstance": isinstance,
+                "True": True,
+                "False": False,
+                "None": None,
+            }
+            try:
+                result = eval(self.condition, {"__builtins__": safe_builtins}, frame_locals)
+                return bool(result)
+            except Exception:
+                # If expression evaluation fails or raises KeyError/AttributeError, do not match
+                return False
+
+        return True
 
     def transition_to_tracing(self, root_execution_id: str) -> None:
         """Transition from ARMED to TRACING upon matching entrypoint."""

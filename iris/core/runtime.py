@@ -83,6 +83,7 @@ def auto_attach_from_db() -> Optional[IrisObserver]:
             session_id=armed["session_id"],
             entry_file=armed["entry_file"],
             entry_function=armed["entry_function"],
+            condition=armed.get("condition"),
         )
         for armed in all_armed
     ]

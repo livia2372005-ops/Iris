@@ -95,6 +95,7 @@ def test_mcp_server() -> None:
             "iris_get_session_status",
             "iris_query_call_tree",
             "iris_inspect_execution_flow",
+            "iris_diagnose_anomaly",
         ]
         for exp in expected_tools:
             assert exp in tool_names, f"Expected tool '{exp}' missing from tools/list"

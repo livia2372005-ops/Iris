@@ -9,7 +9,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
   <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-22%2F22%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
 </p>
 
 > **Iris is a flight recorder for Python code.**  
@@ -256,15 +256,16 @@ Unlike traditional debuggers (`pdb`, `sys.settrace`) which inject 10x–50x slow
 
 ## 🛠️ Core MCP Tools (API Reference)
 
-When connected to Antigravity, the Agent has access to the following 4 tools:
+When connected to any MCP client, the Agent has access to the following 5 tools:
 
 ### 1. `iris_arm_entry`
-Arm an entry point (file and function) for observation.
+Arm an entry point (file and function) for observation with optional predicate conditions.
 - **Parameters:**
   - `entry_file` *(string, required)*: Path or filename of the target script (e.g., `"routes.py"`, `"services/order.py"`).
   - `entry_function` *(string, required)*: Name of the target function (e.g., `"handle_chat"`).
+  - `condition` *(string, optional)*: Python expression evaluated against function arguments at entry (e.g., `"user_id == 42 and amount > 500"`). Tracing only triggers when True.
   - `timeout_seconds` *(int, default: 60)*: Maximum duration in seconds to wait for execution.
-- **Returns:** `session_id`, state (`ARMED`), database path.
+- **Returns:** `session_id`, state (`ARMED`), condition, database path.
 
 ### 2. `iris_get_session_status`
 Check the status and summary statistics of an observation session.
@@ -272,14 +273,20 @@ Check the status and summary statistics of an observation session.
   - `session_id` *(string, required)*: Session ID returned by `iris_arm_entry`.
 - **Returns:** `state` (`ARMED`, `TRACING`, `COMPLETED`, `ABORTED_TIMEOUT`, `COMPLETED_TRUNCATED`), `total_events`, start/end timestamps.
 
-### 3. `iris_query_call_tree`
+### 3. `iris_diagnose_anomaly`
+Smart diagnosis and event compression engine for rapid LLM reasoning.
+- **Parameters:**
+  - `session_id` *(string, required)*: Session ID.
+- **Returns:** Token-efficient markdown report collapsing loops (e.g. 500 iterations ➔ 1 summary), detecting unexpected variable type mutations (e.g. `dict` ➔ `NoneType`), and pinpointing exception root causes.
+
+### 4. `iris_query_call_tree`
 Query the hierarchical call tree of functions invoked during the session.
 - **Parameters:**
   - `session_id` *(string, required)*: Session ID.
   - `depth_limit` *(int, default: 2)*: Maximum call depth to return.
 - **Returns:** JSON hierarchy including `function_name`, `file_path`, `execution_id`, and nested `children`.
 
-### 4. `iris_inspect_execution_flow`
+### 5. `iris_inspect_execution_flow`
 Inspect detailed line-by-line execution, source code, and variable mutations.
 - **Parameters:**
   - `execution_id` *(string, required)*: Specific function execution ID from the call tree.

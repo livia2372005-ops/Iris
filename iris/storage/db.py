@@ -50,6 +50,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     session_id TEXT PRIMARY KEY,
                     entry_file TEXT NOT NULL,
                     entry_function TEXT NOT NULL,
+                    condition TEXT,
                     state TEXT NOT NULL,
                     created_at_mono_ns INTEGER,
                     timeout_seconds INTEGER DEFAULT 60,
@@ -97,6 +98,10 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 conn.execute("ALTER TABLE sessions ADD COLUMN timeout_seconds INTEGER DEFAULT 60")
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute("ALTER TABLE sessions ADD COLUMN condition TEXT")
+            except sqlite3.OperationalError:
+                pass
     finally:
         conn.close()
 
@@ -105,10 +110,11 @@ def arm_session(
     session_id: str,
     entry_file: str,
     entry_function: str,
+    condition: Optional[str] = None,
     timeout_seconds: int = 60,
     db_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Store an ARMED session record in SQLite with creation time and timeout."""
+    """Store an ARMED session record in SQLite with condition, creation time, and timeout."""
     conn = get_connection(db_path)
     import time
     now_mono = time.monotonic_ns()
@@ -117,16 +123,17 @@ def arm_session(
             conn.execute(
                 """
                 INSERT OR REPLACE INTO sessions (
-                    session_id, entry_file, entry_function, state,
+                    session_id, entry_file, entry_function, condition, state,
                     created_at_mono_ns, timeout_seconds, total_events
-                ) VALUES (?, ?, ?, 'ARMED', ?, ?, 0)
+                ) VALUES (?, ?, ?, ?, 'ARMED', ?, ?, 0)
                 """,
-                (session_id, entry_file, entry_function, now_mono, timeout_seconds),
+                (session_id, entry_file, entry_function, condition, now_mono, timeout_seconds),
             )
         return {
             "session_id": session_id,
             "entry_file": entry_file,
             "entry_function": entry_function,
+            "condition": condition,
             "state": "ARMED",
             "timeout_seconds": timeout_seconds,
         }
@@ -144,7 +151,7 @@ def get_session(
     try:
         cursor = conn.execute(
             """
-            SELECT session_id, entry_file, entry_function, state,
+            SELECT session_id, entry_file, entry_function, condition, state,
                    created_at_mono_ns, timeout_seconds,
                    start_time_mono_ns, end_time_mono_ns, total_events
             FROM sessions
@@ -239,7 +246,7 @@ def get_all_armed_sessions(
     try:
         cursor = conn.execute(
             """
-            SELECT session_id, entry_file, entry_function, state
+            SELECT session_id, entry_file, entry_function, condition, state
             FROM sessions
             WHERE state = 'ARMED'
             ORDER BY rowid ASC
@@ -360,3 +367,13 @@ def inspect_execution_flow(
         }
     finally:
         conn.close()
+
+
+def diagnose_session(
+    session_id: str,
+    db_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Perform smart trace diagnosis, loop collapsing, and root cause analysis."""
+    from iris.analysis.diagnoser import TraceDiagnoser
+    diagnoser = TraceDiagnoser(session_id=session_id, db_path=db_path)
+    return diagnoser.diagnose()
