@@ -19,14 +19,15 @@
 
 ## 📌 Table of Contents
 1. [The Problem Iris Solves](#-the-problem-iris-solves)
-2. [Antigravity Integration (100% Guaranteed Discovery)](#-antigravity-integration-100-guaranteed-discovery)
-3. [System Architecture](#-system-architecture)
-4. [Key Features](#-key-features)
-5. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
-6. [User Guide & Workflows](#-user-guide--workflows)
-7. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
-8. [Testing & Development](#-testing--development)
-9. [License](#-license)
+2. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
+3. [Antigravity Integration (100% Guaranteed Discovery)](#-antigravity-integration-100-guaranteed-discovery)
+4. [System Architecture](#-system-architecture)
+5. [Key Features](#-key-features)
+6. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
+7. [User Guide & Workflows](#-user-guide--workflows)
+8. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
+9. [Testing & Development](#-testing--development)
+10. [License](#-license)
 
 ---
 
@@ -41,6 +42,58 @@ When an AI Agent reads static code, it only sees **possibilities** (*"function A
 | **Unexpectedly empty variable** | *"External API must have returned empty data"* | An upstream regex middleware stripped all characters |
 
 Iris does not deduce or speculate for the Agent — it provides **empirical evidence**, allowing the Agent to find the root cause with certainty.
+
+---
+
+## 🌟 Real-World Case Study: Pallets/Flask
+
+To prove that Iris functions seamlessly in production-grade codebases rather than just toy examples, Iris was tested against the official **[Pallets/Flask](https://github.com/pallets/flask)** repository (specifically its canonical **Flaskr** application) without modifying a single line of Flask's code.
+
+### Step 1: Agent Arms Target Function via MCP
+The Agent configures Iris to monitor the `register` endpoint in Flask's auth blueprint:
+```json
+iris_arm_entry(entry_file="auth.py", entry_function="register")
+```
+
+### Step 2: Run the Existing Test Suite via Pytest
+The user (or Agent) runs Flask's existing test suite with no code changes:
+```powershell
+pytest examples/cloned_flask/examples/tutorial/tests/test_auth.py::test_register
+```
+Iris's automatic pytest plugin (`pytest-iris`) instantly detects the armed session and hooks into PEP 669:
+```text
+[Iris] Auto-attached flight recorder for session 'flask_demo_register' (Target: register in auth.py)
+tests\test_auth.py .                                                     [100%]
+1 passed in 0.25s
+```
+
+### Step 3: Agent Queries the Hierarchical Call Tree
+Using `iris_query_call_tree`, the Agent inspects the exact runtime call hierarchy of Flask handling the HTTP request:
+```text
+- register() [exec_b24e81089cf7] (auth.py)
+  - __get__() [exec_77e8149cb9d8] (local.py)
+    - _get_current_object() [exec_46c8969d2584] (local.py)
+    - bind_f() [exec_08d94caef3a0] (local.py)
+  - render_template() [exec_0ad89dab1e83] (templating.py)
+    - _get_current_object() [exec_7e1025cf2218] (local.py)
+    - __get__() [exec_3de1c6fa651e] (utils.py)
+    - get_or_select_template() [exec_71c801a74e4b] (environment.py)
+    - _render() [exec_0ef210b3608e] (templating.py)
+```
+
+### Step 4: Inspecting Line-by-Line Flow & Sanitized Outputs
+Using `iris_inspect_execution_flow`, the Agent inspects statements executed and variable mutations:
+```text
+Line 53: if request.method == "POST":                  | Delta: {}
+Line 81: return render_template("auth/register.html")  | Delta: {}
+RETURN: <!doctype html><title>Register - Flaskr</title>... [truncated 441 chars] ...
+```
+*Notice how Iris automatically truncated large rendered HTML strings via its DataSanitizer to preserve LLM context budget.*
+
+👉 **Reproduce this live:**
+```powershell
+python examples/run_realworld_flask_demo.py
+```
 
 ---
 

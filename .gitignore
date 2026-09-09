@@ -13,6 +13,9 @@ iris.md
 iris_trace.db
 iris_trace.db*
 
+# Cloned demo repositories
+examples/cloned_flask/
+
 # Python & Build Artifacts
 __pycache__/
 *.py[cod]

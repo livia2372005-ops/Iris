@@ -14,11 +14,18 @@ DEFAULT_DB_FILENAME = "iris_trace.db"
 
 
 def get_db_path() -> Path:
-    """Resolve the path to the SQLite database file."""
+    """Resolve the path to the SQLite database file, traversing upwards to find workspace root."""
     custom_path = os.getenv("IRIS_DB_PATH")
     if custom_path:
         return Path(custom_path).resolve()
-    return Path.cwd() / DEFAULT_DB_FILENAME
+
+    # Search upwards from CWD to find workspace root containing .agents, .git, or pyproject.toml
+    curr = Path.cwd().resolve()
+    for directory in [curr] + list(curr.parents):
+        if (directory / ".agents").exists() or (directory / ".git").exists() or (directory / "pyproject.toml").exists():
+            return directory / DEFAULT_DB_FILENAME
+
+    return curr / DEFAULT_DB_FILENAME
 
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
