@@ -5,6 +5,8 @@
 <h1 align="center">Iris (v1) — Flight Recorder for CPython via PEP 669 & MCP</h1>
 
 <p align="center">
+  <a href="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml"><img src="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml/badge.svg" alt="CI Matrix"></a>
+  <a href="https://pypi.org/project/iris-flight-recorder/"><img src="https://img.shields.io/pypi/v/iris-flight-recorder.svg" alt="PyPI Version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
@@ -18,16 +20,33 @@
 ---
 
 ## 📌 Table of Contents
-1. [The Problem Iris Solves](#-the-problem-iris-solves)
-2. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
-3. [AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)](#-ai-agent-integration-antigravity-claude-cursor-windsurf)
-4. [System Architecture](#-system-architecture)
-5. [Key Features](#-key-features)
-6. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
-7. [User Guide & Workflows](#-user-guide--workflows)
-8. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
-9. [Testing & Development](#-testing--development)
-10. [License](#-license)
+1. [Installation](#-installation)
+2. [The Problem Iris Solves](#-the-problem-iris-solves)
+3. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
+4. [AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)](#-ai-agent-integration-antigravity-claude-cursor-windsurf)
+5. [System Architecture](#-system-architecture)
+6. [Key Features](#-key-features)
+7. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
+8. [User Guide & Workflows](#-user-guide--workflows)
+9. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
+10. [Testing & CI/CD](#-testing--cicd)
+11. [License](#-license)
+
+---
+
+## 📦 Installation
+
+Install Iris from PyPI:
+```bash
+pip install iris-flight-recorder
+```
+
+Or install from source with development dependencies:
+```bash
+git clone https://github.com/livia2372005-ops/Iris.git
+cd Iris
+pip install -e .[dev]
+```
 
 ---
 
@@ -419,9 +438,11 @@ python -m iris clean --all
 
 ---
 
-## 🧪 Testing & Development
+## 🧪 Testing & CI/CD
 
-Run the complete automated test suite (**24/24 tests passing**):
+Iris is tested continuously across **Linux (Ubuntu)**, **Windows**, and **macOS** on Python **3.12**, **3.13**, and **3.14-dev** via GitHub Actions.
+
+Run the complete automated test suite locally (**24/24 tests passing**):
 ```powershell
 python -m pytest tests/
 ```

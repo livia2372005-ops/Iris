@@ -7,12 +7,54 @@ name = "iris-flight-recorder"
 version = "0.1.0"
 description = "A zero stop-the-world overhead flight recorder for CPython code inspection via PEP 669 & MCP"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Iris Team", email = "maintainers@iris-recorder.dev"}
+]
+keywords = [
+    "pep-669",
+    "mcp",
+    "model-context-protocol",
+    "flight-recorder",
+    "debugger",
+    "cpython",
+    "profiling",
+    "tracing",
+    "ai-agents",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.2.0",
     "pydantic>=2.0",
     "click>=8.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "build>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/livia2372005-ops/Iris"
+Documentation = "https://github.com/livia2372005-ops/Iris#readme"
+Repository = "https://github.com/livia2372005-ops/Iris.git"
+Issues = "https://github.com/livia2372005-ops/Iris/issues"
+Changelog = "https://github.com/livia2372005-ops/Iris/releases"
 
 [project.scripts]
 iris = "iris.cli:main"
@@ -23,3 +65,6 @@ iris = "iris.pytest_plugin"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["iris*"]
+
+[tool.setuptools.package-data]
+iris = ["py.typed"]
