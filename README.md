@@ -1,10 +1,16 @@
-# 🛰️ Iris (v1) — Flight Recorder for CPython via PEP 669 & MCP
+<p align="center">
+  <img src="assets/iris_logo.png" alt="Iris Logo" width="480" />
+</p>
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Protocol: MCP](https://img.shields.io/badge/Protocol-MCP%202.x-green.svg)](https://modelcontextprotocol.io/)
-[![Engine: PEP 669](https://img.shields.io/badge/Engine-PEP%20669-orange.svg)](https://peps.python.org/pep-0669/)
-[![Tests: Passing](https://img.shields.io/badge/Tests-11%2F11%20Passing-brightgreen.svg)](tests/)
+<h1 align="center">Iris (v1) — Flight Recorder for CPython via PEP 669 & MCP</h1>
+
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
+  <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-11%2F11%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+</p>
 
 > **Iris is a flight recorder for Python code.**  
 > Instead of traditional debuggers that cause **stop-the-world freezes** while an LLM is thinking, Iris lets code run naturally at native speed. It records call trees, line executions, branch decisions, and variable mutations without pausing, exposing empirical execution data to AI coding agents (**Google Antigravity, Claude Code, Cursor**) via the **Model Context Protocol (MCP)**.
