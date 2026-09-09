@@ -9,7 +9,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
   <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/Tests-22%2F22%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-24%2F24%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
 </p>
 
 > **Iris is a flight recorder for Python code.**  
@@ -216,15 +216,16 @@ Add the standard stdio MCP entry to your client configuration:
 
 1. **Zero Stop-the-World Overhead**: Built on CPython's PEP 669 (`sys.monitoring`) and asynchronous lock-free persistence. The target application process is never paused or blocked while traces are saved or while AI agents query the database.
 2. **Narrow ARMED Instrumentation**: While sleeping (`UNARMED`), overhead is strictly 0.0%. While `ARMED`, Iris registers only `PY_START` to intercept the target entrypoint, completely skipping `LINE` and `BRANCH` bytecode callbacks on unrelated code.
-3. **Automatic Pytest Plugin (`pytest-iris`)**: When an Agent arms an entrypoint, you just run `pytest`. Iris automatically attaches, traces, and flushes **without modifying a single line of test code**.
-4. **Variable Delta (Diff) Tracking**: Each line event computes and isolates **only variables that actually changed** (`delta`), saving >80% context tokens for the LLM.
-5. **Full Asyncio Context**: Preserves coroutine parent-child hierarchies and automatically captures `async_task_id` via `contextvars` and `asyncio.current_task()`.
-6. **Multi-layer Data Sanitizer**: Masks sensitive variables (`password`, `token`, `secret`, `api_key`, `credit_card`, `ssn`) and scans values with regex for JWT, AWS keys, and private key PEMs before writing to disk.
-7. **Circuit Breakers**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**, preventing disk bloat during runaway loops.
-8. **Auto-Timeout**: Automatically transitions stale sessions to `ABORTED_TIMEOUT` if the target function is not invoked within the timeout window.
-9. **Multi-Session Registry**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices without interference.
-10. **Coroutine Suspension Tracing (`PY_YIELD` / `PY_RESUME`)**: Accurately traces async generators and coroutines pausing on `await` and resuming, isolating execution stacks per task via `contextvars`.
-11. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
+3. **Zero-Dependency Web Middleware (ASGI / WSGI)**: Standard middlewares for FastAPI, Starlette, Flask, and Django with zero third-party dependencies. Allows agents or developers to trigger tracing on demand via HTTP headers (`X-Iris-Trace: true`, `X-Iris-Target`, `X-Iris-Condition`) and returns the `X-Iris-Session-Id` header.
+4. **Conditional Arming & Predicates**: Arm functions conditionally (e.g. `condition="user_id == 42 and amount > 500"`). The flight recorder evaluates local arguments safely via Python AST and only records when the predicate matches.
+5. **Smart Trace Diagnosis & Event Compression (`iris_diagnose_anomaly`)**: Compacts thousands of loop iterations into single diagnostic summaries, flags unexpected variable type mutations (e.g. `dict` ➔ `NoneType`), and maps exception root causes directly to line numbers.
+6. **Automatic Pytest Plugin (`pytest-iris`)**: When an Agent arms an entrypoint, you just run `pytest`. Iris automatically attaches, traces, and flushes **without modifying a single line of test code**.
+7. **Variable Delta (Diff) Tracking**: Each line event computes and isolates **only variables that actually changed** (`delta`), saving >80% context tokens for the LLM.
+8. **Full Asyncio Context & Coroutine Suspension**: Preserves coroutine parent-child hierarchies via `contextvars`, capturing `async_task_id` and tracking coroutine pause/resume states (`PY_YIELD` / `PY_RESUME`).
+9. **Multi-layer Data Sanitizer**: Masks sensitive variables (`password`, `token`, `secret`, `api_key`, `credit_card`, `ssn`) and scans values with regex for JWT, AWS keys, and private key PEMs before writing to disk.
+10. **Circuit Breakers & Auto-Timeout**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**. Automatically cleans up stale sessions when targets are not triggered.
+11. **Multi-Session Registry**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices without interference.
+12. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
 
 ---
 
@@ -317,7 +318,59 @@ Inspect detailed line-by-line execution, source code, and variable mutations.
 
 ---
 
-### Scenario 2: Running Standalone Scripts via CLI
+### Scenario 2: Live Web Framework Tracing via Middleware (FastAPI / Flask / Django)
+
+Iris includes zero-dependency **ASGI** and **WSGI** middlewares. You can keep Iris installed in your web application without any performance impact, triggering on-demand flight recording per-request via HTTP headers.
+
+#### A. FastAPI & Starlette (ASGI)
+```python
+from fastapi import FastAPI
+from iris.middleware.asgi import IrisASGIMiddleware
+
+app = FastAPI()
+# Add Iris middleware (zero overhead when X-Iris-Trace header is absent)
+app.add_middleware(IrisASGIMiddleware)
+
+@app.get("/orders/{order_id}")
+async def get_order(order_id: int):
+    return {"order_id": order_id, "status": "processed"}
+```
+
+#### B. Flask & Django (WSGI)
+```python
+from flask import Flask
+from iris.middleware.wsgi import IrisWSGIMiddleware
+
+app = Flask(__name__)
+# Wrap WSGI application callable
+app.wsgi_app = IrisWSGIMiddleware(app.wsgi_app)
+```
+
+#### C. Triggering On-Demand Tracing via HTTP Headers
+Send requests with standard Iris control headers:
+```powershell
+# Curl request triggering flight recording for the target function
+curl -X GET "http://localhost:8000/orders/42" `
+  -H "X-Iris-Trace: true" `
+  -H "X-Iris-Target: main.py:get_order" `
+  -H "X-Iris-Condition: order_id == 42"
+```
+
+The response returns an `X-Iris-Session-Id` header:
+```http
+HTTP/1.1 200 OK
+content-type: application/json
+X-Iris-Session-Id: iris_asgi_3a4c5f921
+```
+
+The AI Coding Agent can immediately inspect or diagnose this live HTTP request:
+```json
+iris_diagnose_anomaly(session_id="iris_asgi_3a4c5f921")
+```
+
+---
+
+### Scenario 3: Running Standalone Scripts via CLI
 ```powershell
 # Execute any script under Iris flight recording
 python -m iris run app/main.py
@@ -325,7 +378,7 @@ python -m iris run app/main.py
 
 ---
 
-### Scenario 3: Programmatic Tracing in Python Code
+### Scenario 4: Programmatic Tracing in Python Code
 ```python
 from iris import trace, trace_context
 
@@ -368,12 +421,20 @@ python -m iris clean --all
 
 ## 🧪 Testing & Development
 
-Run the complete automated test suite (11/11 tests passing):
+Run the complete automated test suite (**24/24 tests passing**):
 ```powershell
 python -m pytest tests/
 ```
 
 Test suite coverage:
+- `test_batch1.py`: Minimal ARMED bytecode scoping, internal path fast-caching, and Python 3.12 branch jump rule.
+- `test_batch2_concurrency.py`: Monotonic multi-threaded sequence sequencing and `PY_YIELD` / `PY_RESUME` coroutine suspension tracing.
+- `test_batch2_multisession.py`: Multi-session registry and concurrent parallel entrypoint tracking.
+- `test_batch2_py314_compat.py`: Python 3.14+ `MonitoringProvider` branch bitmask dispatching and version fallback.
+- `test_conditional_arming.py`: Predicate AST parsing, argument extraction, and conditional execution filtering.
+- `test_smart_diagnosis.py`: Event compression, loop collapsing, type mutation alerts, and exception root-cause tracing.
+- `test_middleware.py`: Zero-dependency ASGI and WSGI middleware lifecycle and HTTP header triggering.
+- `test_realworld_flask.py`: End-to-end flight recording on cloned official Pallets/Flask repository.
 - `test_mcp_handshake.py`: Stdio JSON-RPC protocol compliance and MCP capabilities.
 - `test_sanitizer.py`: DataSanitizer blacklist, regex, and truncation rules.
 - `test_fsm_observer.py`: FSM state transitions, PEP 669 line/branch/return events, nested functions, and asyncio tasks.
