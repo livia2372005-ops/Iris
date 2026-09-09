@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "iris-flight-recorder"
 version = "0.1.0"
-description = "A zero-overhead flight recorder for CPython code inspection via MCP"
+description = "A zero stop-the-world overhead flight recorder for CPython code inspection via PEP 669 & MCP"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

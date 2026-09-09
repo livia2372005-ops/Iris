@@ -38,6 +38,8 @@ class IrisObserver:
         import sysconfig
         self._stdlib_dir = str(Path(sysconfig.get_path("stdlib")).resolve()).lower()
 
+        self._internal_cache: Dict[str, bool] = {}
+
     def _next_seq(self) -> int:
         self._seq_counter += 1
         return self._seq_counter
@@ -57,19 +59,26 @@ class IrisObserver:
         """Check if file belongs to Iris internally or standard library internals."""
         if not filename:
             return True
+        cached = self._internal_cache.get(filename)
+        if cached is not None:
+            return cached
+
         norm = str(Path(filename).resolve()).lower()
+        res = False
         if self._iris_dir in norm:
-            return True
-        # Ignore Python stdlib internals (encodings, json, os, queue, linecache, etc.)
-        if norm.startswith(self._stdlib_dir) and "site-packages" not in norm:
-            return True
-        base = os.path.basename(norm)
-        if base in ("queue.py", "threading.py", "linecache.py", "contextvars.py"):
-            return True
-        return False
+            res = True
+        elif norm.startswith(self._stdlib_dir) and "site-packages" not in norm:
+            res = True
+        else:
+            base = os.path.basename(norm)
+            if base in ("queue.py", "threading.py", "linecache.py", "contextvars.py"):
+                res = True
+
+        self._internal_cache[filename] = res
+        return res
 
     def attach(self) -> None:
-        """Register sys.monitoring callbacks and activate monitoring."""
+        """Register sys.monitoring callbacks and activate minimal ARMED monitoring."""
         if self._attached:
             return
 
@@ -86,15 +95,9 @@ class IrisObserver:
         sys.monitoring.register_callback(TOOL_ID, events.LINE, self._on_line)
         sys.monitoring.register_callback(TOOL_ID, events.BRANCH, self._on_branch)
 
-        # Listen to all 5 event types
-        all_events = (
-            events.PY_START
-            | events.PY_RETURN
-            | events.PY_UNWIND
-            | events.LINE
-            | events.BRANCH
-        )
-        sys.monitoring.set_events(TOOL_ID, all_events)
+        # Performance fix: When ARMED, ONLY listen to PY_START globally!
+        # Do NOT listen to LINE or BRANCH globally while waiting, eliminating overhead.
+        sys.monitoring.set_events(TOOL_ID, events.PY_START)
         self._attached = True
 
     def detach(self) -> None:
@@ -133,6 +136,17 @@ class IrisObserver:
                 self._parent_map[root_id] = None
                 self._current_exec_var.set(root_id)
                 self._prev_locals[root_id] = {}
+
+                # Elevate events to full tracing now that we matched entry point!
+                events = sys.monitoring.events
+                all_events = (
+                    events.PY_START
+                    | events.PY_RETURN
+                    | events.PY_UNWIND
+                    | events.LINE
+                    | events.BRANCH
+                )
+                sys.monitoring.set_events(TOOL_ID, all_events)
 
                 now_ns = time.monotonic_ns()
                 self.queue.put_execution_start(
@@ -230,8 +244,10 @@ class IrisObserver:
             self._finalize_session(truncated=True)
             return
 
-        # Branch taken: 1 if jumping forward/destination, 0 otherwise
-        branch_taken = 1 if destination_offset > instruction_offset else 0
+        # Branch taken: in Python 3.12, 2-byte instructions fallthrough to offset + 2.
+        # If destination != offset + 2, a conditional or loop jump was taken!
+        jumped = destination_offset != (instruction_offset + 2)
+        branch_taken = 1 if jumped else 0
         event_id = f"evt_{uuid.uuid4().hex[:12]}"
         seq = self._next_seq()
 
@@ -246,6 +262,7 @@ class IrisObserver:
             payload={
                 "offset": instruction_offset,
                 "dest": destination_offset,
+                "jumped": jumped,
             },
         )
 
