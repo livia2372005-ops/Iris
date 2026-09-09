@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iris-flight-recorder"
+version = "0.1.0"
+description = "A zero-overhead flight recorder for CPython code inspection via MCP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.2.0",
+    "pydantic>=2.0",
+    "click>=8.0",
+]
+
+[project.scripts]
+iris = "iris.cli:main"
+
+[project.entry-points.pytest11]
+iris = "iris.pytest_plugin"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iris*"]

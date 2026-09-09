@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "iris": {
+      "command": "python",
+      "args": ["-m", "iris.mcp.server"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "iris",
+  "version": "0.1.0",
+  "description": "Iris: Flight Recorder for CPython code inspection via PEP 669 & MCP"
+}
