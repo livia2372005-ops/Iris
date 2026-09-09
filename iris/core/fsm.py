@@ -16,6 +16,7 @@ class SessionState(str, Enum):
     COMPLETED = "COMPLETED"
     COMPLETED_TRUNCATED = "COMPLETED_TRUNCATED"
     ABORTED = "ABORTED"
+    STOPPED = "STOPPED"
 
 
 MAX_EVENTS_CIRCUIT_BREAKER = 500_000
@@ -132,6 +133,12 @@ class SessionCoordinator:
             self.state = (
                 SessionState.COMPLETED_TRUNCATED if truncated else SessionState.COMPLETED
             )
+            self.end_time_mono_ns = time.monotonic_ns()
+
+    def transition_to_stopped(self) -> None:
+        """Actively terminate session state upon user or agent command."""
+        if self.state in (SessionState.TRACING, SessionState.ARMED):
+            self.state = SessionState.STOPPED
             self.end_time_mono_ns = time.monotonic_ns()
 
     def is_active(self) -> bool:

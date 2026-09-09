@@ -15,6 +15,8 @@ from iris.storage.db import (
     init_db,
     inspect_execution_flow as db_inspect_execution_flow,
     query_call_tree as db_query_call_tree,
+    query_data_lineage,
+    stop_session as db_stop_session,
 )
 
 
@@ -191,6 +193,54 @@ def create_server() -> MCPServer:
             Dict containing session diagnostics, compressed loops, and markdown report.
         """
         return diagnose_session(session_id=session_id)
+
+    @server.tool(
+        name="iris_trace_data_lineage",
+        description=(
+            "Trace the causal data lineage graph of a variable across execution lines and versions. "
+            "Direction 'BACKWARD' unrolls where a faulty value originated from (root cause). "
+            "Direction 'FORWARD' traces how a value propagated to subsequent variables (impact radius). "
+            "Includes epistemic status ('Observed', 'Static', 'Inferred', 'Unknown') and compact ASCII flow."
+        ),
+    )
+    def iris_trace_data_lineage(
+        value_ref_id: str,
+        direction: str = "BACKWARD",
+        depth_limit: int = 5,
+    ) -> Dict[str, Any]:
+        """Query data lineage graph for a specific variable value reference.
+
+        Args:
+            value_ref_id: Unique ValueRef ID (e.g. 'vref_1a2b3c4d5e6f').
+            direction: 'BACKWARD' to find causal sources, or 'FORWARD' to find impacted downstream variables.
+            depth_limit: Maximum traversal hops across causal edges (default 5).
+
+        Returns:
+            Dict containing graph nodes, edges, direction, and an ASCII flow diagram.
+        """
+        return query_data_lineage(
+            value_ref_id=value_ref_id,
+            direction=direction,
+            depth_limit=depth_limit,
+        )
+
+    @server.tool(
+        name="iris_stop_session",
+        description=(
+            "Actively stop an ARMED or TRACING session without waiting for timeout expiration. "
+            "Transitions session state to 'STOPPED' and detaches any active PEP 669 monitoring."
+        ),
+    )
+    def iris_stop_session(session_id: str) -> Dict[str, Any]:
+        """Actively stop and terminate an ongoing observation session.
+
+        Args:
+            session_id: The ID of the session to terminate.
+
+        Returns:
+            Dict confirming state transition to 'STOPPED'.
+        """
+        return db_stop_session(session_id=session_id)
 
     return server
 

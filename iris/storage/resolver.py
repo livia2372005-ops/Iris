@@ -11,6 +11,22 @@ class SourceResolver:
     """Resolves and caches source file lines for code-level agent inspection."""
 
     @classmethod
+    def get_source(cls, file_path: str) -> Optional[str]:
+        """Fetch full source content for a file."""
+        if not file_path:
+            return None
+        try:
+            lines = linecache.getlines(file_path)
+            if lines:
+                return "".join(lines)
+            p = Path(file_path)
+            if p.exists() and p.is_file():
+                return p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+        return None
+
+    @classmethod
     def resolve_line(cls, file_path: str, line_number: int) -> Optional[str]:
         """Fetch the exact trimmed source line from a file."""
         if not file_path or line_number <= 0:

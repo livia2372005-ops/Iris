@@ -87,6 +87,35 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
                 CREATE INDEX IF NOT EXISTS idx_events_exec_seq
                     ON events(execution_id, sequence_number);
+
+                CREATE TABLE IF NOT EXISTS value_refs (
+                    value_ref_id TEXT PRIMARY KEY,
+                    execution_id TEXT NOT NULL,
+                    variable_name TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    line_number INTEGER NOT NULL,
+                    value_snapshot TEXT,
+                    epistemic_status TEXT NOT NULL,
+                    FOREIGN KEY(execution_id) REFERENCES executions(execution_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS lineage_edges (
+                    edge_id TEXT PRIMARY KEY,
+                    source_value_ref_id TEXT NOT NULL,
+                    target_value_ref_id TEXT NOT NULL,
+                    operation TEXT,
+                    FOREIGN KEY(source_value_ref_id) REFERENCES value_refs(value_ref_id),
+                    FOREIGN KEY(target_value_ref_id) REFERENCES value_refs(value_ref_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_vrefs_exec_var
+                    ON value_refs(execution_id, variable_name);
+
+                CREATE INDEX IF NOT EXISTS idx_lineage_target
+                    ON lineage_edges(target_value_ref_id);
+
+                CREATE INDEX IF NOT EXISTS idx_lineage_source
+                    ON lineage_edges(source_value_ref_id);
                 """
             )
             # Ensure columns exist if table was created earlier without them
@@ -190,6 +219,8 @@ def clean_db(
     try:
         with conn:
             if all_sessions:
+                conn.execute("DELETE FROM lineage_edges")
+                conn.execute("DELETE FROM value_refs")
                 conn.execute("DELETE FROM events")
                 conn.execute("DELETE FROM executions")
                 cursor = conn.execute("DELETE FROM sessions")
@@ -208,6 +239,28 @@ def clean_db(
                 deleted = len(old_ids)
                 if old_ids:
                     placeholders = ",".join("?" * len(old_ids))
+                    conn.execute(
+                        f"""
+                        DELETE FROM lineage_edges WHERE target_value_ref_id IN (
+                            SELECT value_ref_id FROM value_refs WHERE execution_id IN (
+                                SELECT execution_id FROM executions WHERE session_id IN ({placeholders})
+                            )
+                        ) OR source_value_ref_id IN (
+                            SELECT value_ref_id FROM value_refs WHERE execution_id IN (
+                                SELECT execution_id FROM executions WHERE session_id IN ({placeholders})
+                            )
+                        )
+                        """,
+                        old_ids + old_ids,
+                    )
+                    conn.execute(
+                        f"""
+                        DELETE FROM value_refs WHERE execution_id IN (
+                            SELECT execution_id FROM executions WHERE session_id IN ({placeholders})
+                        )
+                        """,
+                        old_ids,
+                    )
                     conn.execute(
                         f"""
                         DELETE FROM events WHERE execution_id IN (
@@ -377,3 +430,184 @@ def diagnose_session(
     from iris.analysis.diagnoser import TraceDiagnoser
     diagnoser = TraceDiagnoser(session_id=session_id, db_path=db_path)
     return diagnoser.diagnose()
+
+
+def stop_session(session_id: str, db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Actively stop an ARMED or TRACING session."""
+    conn = get_connection(db_path)
+    import time
+    now_mono = time.monotonic_ns()
+    try:
+        with conn:
+            row = conn.execute(
+                "SELECT session_id, state, total_events FROM sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return {"error": f"Session {session_id} not found"}
+
+            curr_state = row["state"]
+            if curr_state in ("COMPLETED", "COMPLETED_TRUNCATED", "ABORTED", "STOPPED"):
+                return {"session_id": session_id, "state": curr_state, "message": "Session already inactive"}
+
+            conn.execute(
+                """
+                UPDATE sessions
+                SET state = 'STOPPED',
+                    end_time_mono_ns = ?
+                WHERE session_id = ?
+                """,
+                (now_mono, session_id),
+            )
+            return {"session_id": session_id, "state": "STOPPED", "stopped_at_mono_ns": now_mono}
+    finally:
+        conn.close()
+
+
+def query_data_lineage(
+    value_ref_id: str,
+    direction: str = "BACKWARD",
+    depth_limit: int = 5,
+    db_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Traverse and query the data lineage graph from a given value_ref_id.
+    
+    Supports:
+    - direction="BACKWARD": Trace causal root-cause inputs.
+    - direction="FORWARD": Trace downstream blast radius / impacts.
+    """
+    conn = get_connection(db_path)
+    direction_upper = direction.strip().upper() if direction else "BACKWARD"
+    if direction_upper not in ("BACKWARD", "FORWARD"):
+        direction_upper = "BACKWARD"
+
+    import collections
+    try:
+        root_row = conn.execute(
+            """
+            SELECT value_ref_id, execution_id, variable_name, version,
+                   line_number, value_snapshot, epistemic_status
+            FROM value_refs
+            WHERE value_ref_id = ?
+            """,
+            (value_ref_id,),
+        ).fetchone()
+
+        if not root_row:
+            return {
+                "error": f"ValueRef '{value_ref_id}' not found in database",
+                "nodes": [],
+                "edges": [],
+                "ascii_flow": "",
+            }
+
+        root_node = dict(root_row)
+        nodes: Dict[str, Dict[str, Any]] = {root_node["value_ref_id"]: root_node}
+        edges: List[Dict[str, Any]] = []
+        visited_edges: set = set()
+
+        queue = collections.deque([(root_node["value_ref_id"], 0)])
+
+        while queue:
+            curr_id, curr_depth = queue.popleft()
+            if curr_depth >= depth_limit:
+                continue
+
+            if direction_upper == "BACKWARD":
+                edge_rows = conn.execute(
+                    """
+                    SELECT edge_id, source_value_ref_id, target_value_ref_id, operation
+                    FROM lineage_edges
+                    WHERE target_value_ref_id = ?
+                    """,
+                    (curr_id,),
+                ).fetchall()
+                for e_row in edge_rows:
+                    e = dict(e_row)
+                    if e["edge_id"] not in visited_edges:
+                        visited_edges.add(e["edge_id"])
+                        edges.append(e)
+                        src_id = e["source_value_ref_id"]
+                        if src_id not in nodes:
+                            src_row = conn.execute(
+                                """
+                                SELECT value_ref_id, execution_id, variable_name, version,
+                                       line_number, value_snapshot, epistemic_status
+                                FROM value_refs
+                                WHERE value_ref_id = ?
+                                """,
+                                (src_id,),
+                            ).fetchone()
+                            if src_row:
+                                nodes[src_id] = dict(src_row)
+                                queue.append((src_id, curr_depth + 1))
+            else:
+                edge_rows = conn.execute(
+                    """
+                    SELECT edge_id, source_value_ref_id, target_value_ref_id, operation
+                    FROM lineage_edges
+                    WHERE source_value_ref_id = ?
+                    """,
+                    (curr_id,),
+                ).fetchall()
+                for e_row in edge_rows:
+                    e = dict(e_row)
+                    if e["edge_id"] not in visited_edges:
+                        visited_edges.add(e["edge_id"])
+                        edges.append(e)
+                        tgt_id = e["target_value_ref_id"]
+                        if tgt_id not in nodes:
+                            tgt_row = conn.execute(
+                                """
+                                SELECT value_ref_id, execution_id, variable_name, version,
+                                       line_number, value_snapshot, epistemic_status
+                                FROM value_refs
+                                WHERE value_ref_id = ?
+                                """,
+                                (tgt_id,),
+                            ).fetchone()
+                            if tgt_row:
+                                nodes[tgt_id] = dict(tgt_row)
+                                queue.append((tgt_id, curr_depth + 1))
+
+        # Generate compact ASCII DAG representation for AI agent reasoning
+        ascii_lines = []
+        val_preview = root_node['value_snapshot'] or "None"
+        if len(val_preview) > 60:
+            val_preview = val_preview[:57] + "..."
+        ascii_lines.append(
+            f"Root: {root_node['variable_name']} (v{root_node['version']}) at L{root_node['line_number']} [{root_node['epistemic_status']}] = {val_preview}"
+        )
+
+        if direction_upper == "BACKWARD":
+            for edge in edges:
+                src = nodes.get(edge["source_value_ref_id"])
+                if src:
+                    s_val = src['value_snapshot'] or "None"
+                    if len(s_val) > 50:
+                        s_val = s_val[:47] + "..."
+                    ascii_lines.append(
+                        f"  ▲-- [{edge.get('operation', 'assign')}] -- {src['variable_name']} (v{src['version']}) at L{src['line_number']} [{src['epistemic_status']}] = {s_val}"
+                    )
+        else:
+            for edge in edges:
+                tgt = nodes.get(edge["target_value_ref_id"])
+                if tgt:
+                    t_val = tgt['value_snapshot'] or "None"
+                    if len(t_val) > 50:
+                        t_val = t_val[:47] + "..."
+                    ascii_lines.append(
+                        f"  ▼-- [{edge.get('operation', 'assign')}] ➔ {tgt['variable_name']} (v{tgt['version']}) at L{tgt['line_number']} [{tgt['epistemic_status']}] = {t_val}"
+                    )
+
+        return {
+            "root_value_ref_id": value_ref_id,
+            "direction": direction_upper,
+            "depth_limit": depth_limit,
+            "nodes": list(nodes.values()),
+            "edges": edges,
+            "ascii_flow": "\n".join(ascii_lines),
+        }
+    finally:
+        conn.close()
+

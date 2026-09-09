@@ -104,6 +104,52 @@ class EventQueue:
             )
         )
 
+    def put_value_ref(
+        self,
+        value_ref_id: str,
+        execution_id: str,
+        variable_name: str,
+        version: int,
+        line_number: int,
+        value_snapshot: Optional[str],
+        epistemic_status: str,
+    ) -> None:
+        """Enqueue a variable value_ref record."""
+        self._queue.put(
+            (
+                "VALUE_REF",
+                (
+                    value_ref_id,
+                    execution_id,
+                    variable_name,
+                    version,
+                    line_number,
+                    value_snapshot,
+                    epistemic_status,
+                ),
+            )
+        )
+
+    def put_lineage_edge(
+        self,
+        edge_id: str,
+        source_value_ref_id: str,
+        target_value_ref_id: str,
+        operation: Optional[str],
+    ) -> None:
+        """Enqueue a causal lineage edge record."""
+        self._queue.put(
+            (
+                "LINEAGE_EDGE",
+                (
+                    edge_id,
+                    source_value_ref_id,
+                    target_value_ref_id,
+                    operation,
+                ),
+            )
+        )
+
     def _worker_loop(self) -> None:
         """Background thread loop draining events and committing in batches."""
         conn = get_connection(self.db_path)
@@ -143,6 +189,8 @@ class EventQueue:
         exec_ends = []
         events = []
         session_updates = []
+        vrefs = []
+        lineage_edges = []
 
         for item_type, data in batch:
             if item_type == "EXEC_START":
@@ -153,6 +201,10 @@ class EventQueue:
                 events.append(data)
             elif item_type == "SESSION_UPDATE":
                 session_updates.append(data)
+            elif item_type == "VALUE_REF":
+                vrefs.append(data)
+            elif item_type == "LINEAGE_EDGE":
+                lineage_edges.append(data)
 
         with conn:
             if exec_starts:
@@ -183,6 +235,25 @@ class EventQueue:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     events,
+                )
+            if vrefs:
+                conn.executemany(
+                    """
+                    INSERT OR REPLACE INTO value_refs (
+                        value_ref_id, execution_id, variable_name,
+                        version, line_number, value_snapshot, epistemic_status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    vrefs,
+                )
+            if lineage_edges:
+                conn.executemany(
+                    """
+                    INSERT OR REPLACE INTO lineage_edges (
+                        edge_id, source_value_ref_id, target_value_ref_id, operation
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    lineage_edges,
                 )
             if session_updates:
                 for state, start_ns, end_ns, tot_ev, sid in session_updates:

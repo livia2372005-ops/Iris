@@ -5,13 +5,11 @@
 <h1 align="center">Iris (v1) — Flight Recorder for CPython via PEP 669 & MCP</h1>
 
 <p align="center">
-  <a href="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml"><img src="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml/badge.svg" alt="CI Matrix"></a>
-  <a href="https://pypi.org/project/iris-flight-recorder/"><img src="https://img.shields.io/pypi/v/iris-flight-recorder.svg" alt="PyPI Version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
   <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/Tests-24%2F24%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-33%2F33%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
 </p>
 
 > **Iris is a flight recorder for Python code.**  
@@ -20,33 +18,16 @@
 ---
 
 ## 📌 Table of Contents
-1. [Installation](#-installation)
-2. [The Problem Iris Solves](#-the-problem-iris-solves)
-3. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
-4. [AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)](#-ai-agent-integration-antigravity-claude-cursor-windsurf)
-5. [System Architecture](#-system-architecture)
-6. [Key Features](#-key-features)
-7. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
-8. [User Guide & Workflows](#-user-guide--workflows)
-9. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
-10. [Testing & CI/CD](#-testing--cicd)
-11. [License](#-license)
-
----
-
-## 📦 Installation
-
-Install Iris from PyPI:
-```bash
-pip install iris-flight-recorder
-```
-
-Or install from source with development dependencies:
-```bash
-git clone https://github.com/livia2372005-ops/Iris.git
-cd Iris
-pip install -e .[dev]
-```
+1. [The Problem Iris Solves](#-the-problem-iris-solves)
+2. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
+3. [AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)](#-ai-agent-integration-antigravity-claude-cursor-windsurf)
+4. [System Architecture](#-system-architecture)
+5. [Key Features](#-key-features)
+6. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
+7. [User Guide & Workflows](#-user-guide--workflows)
+8. [Security & Safety (Circuit Breaker)](#-security--safety-circuit-breaker)
+9. [Testing & Development](#-testing--development)
+10. [License](#-license)
 
 ---
 
@@ -235,16 +216,18 @@ Add the standard stdio MCP entry to your client configuration:
 
 1. **Zero Stop-the-World Overhead**: Built on CPython's PEP 669 (`sys.monitoring`) and asynchronous lock-free persistence. The target application process is never paused or blocked while traces are saved or while AI agents query the database.
 2. **Narrow ARMED Instrumentation**: While sleeping (`UNARMED`), overhead is strictly 0.0%. While `ARMED`, Iris registers only `PY_START` to intercept the target entrypoint, completely skipping `LINE` and `BRANCH` bytecode callbacks on unrelated code.
-3. **Zero-Dependency Web Middleware (ASGI / WSGI)**: Standard middlewares for FastAPI, Starlette, Flask, and Django with zero third-party dependencies. Allows agents or developers to trigger tracing on demand via HTTP headers (`X-Iris-Trace: true`, `X-Iris-Target`, `X-Iris-Condition`) and returns the `X-Iris-Session-Id` header.
-4. **Conditional Arming & Predicates**: Arm functions conditionally (e.g. `condition="user_id == 42 and amount > 500"`). The flight recorder evaluates local arguments safely via Python AST and only records when the predicate matches.
-5. **Smart Trace Diagnosis & Event Compression (`iris_diagnose_anomaly`)**: Compacts thousands of loop iterations into single diagnostic summaries, flags unexpected variable type mutations (e.g. `dict` ➔ `NoneType`), and maps exception root causes directly to line numbers.
-6. **Automatic Pytest Plugin (`pytest-iris`)**: When an Agent arms an entrypoint, you just run `pytest`. Iris automatically attaches, traces, and flushes **without modifying a single line of test code**.
-7. **Variable Delta (Diff) Tracking**: Each line event computes and isolates **only variables that actually changed** (`delta`), saving >80% context tokens for the LLM.
-8. **Full Asyncio Context & Coroutine Suspension**: Preserves coroutine parent-child hierarchies via `contextvars`, capturing `async_task_id` and tracking coroutine pause/resume states (`PY_YIELD` / `PY_RESUME`).
-9. **Multi-layer Data Sanitizer**: Masks sensitive variables (`password`, `token`, `secret`, `api_key`, `credit_card`, `ssn`) and scans values with regex for JWT, AWS keys, and private key PEMs before writing to disk.
-10. **Circuit Breakers & Auto-Timeout**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**. Automatically cleans up stale sessions when targets are not triggered.
-11. **Multi-Session Registry**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices without interference.
-12. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
+3. **Variable-Level Data Lineage Graph (`iris_trace_data_lineage`)**: Constructs an empirical causal graph of variable versions (`value_refs` and `lineage_edges`) across execution lines. AI Agents can slice backward (`BACKWARD`) to find the exact root cause of faulty state, or slice forward (`FORWARD`) to assess the blast radius of unexpected inputs.
+4. **4 Epistemic Truth Statuses**: Transparently classifies every variable snapshot as `Observed` (direct runtime measurement), `Static` (module global / constant), `Inferred` (derived from AST when skipped), or `Unknown` (unmeasured external boundaries).
+5. **Zero-Dependency Web Middleware (ASGI / WSGI)**: Standard middlewares for FastAPI, Starlette, Flask, and Django with zero third-party dependencies. Allows agents or developers to trigger tracing on demand via HTTP headers (`X-Iris-Trace: true`, `X-Iris-Target`, `X-Iris-Condition`) and returns the `X-Iris-Session-Id` header.
+6. **Conditional Arming & Predicates**: Arm functions conditionally (e.g. `condition="user_id == 42 and amount > 500"`). The flight recorder evaluates local arguments safely via Python AST and only records when the predicate matches.
+7. **Smart Trace Diagnosis & Event Compression (`iris_diagnose_anomaly`)**: Compacts thousands of loop iterations into single diagnostic summaries, flags unexpected variable type mutations (e.g. `dict` ➔ `NoneType`), and maps exception root causes directly to line numbers.
+8. **Automatic Pytest Plugin (`pytest-iris`)**: When an Agent arms an entrypoint, you just run `pytest`. Iris automatically attaches, traces, and flushes **without modifying a single line of test code**.
+9. **Variable Delta (Diff) Tracking**: Each line event computes and isolates **only variables that actually changed** (`delta`), saving >80% context tokens for the LLM.
+10. **Full Asyncio Context & Coroutine Suspension**: Preserves coroutine parent-child hierarchies via `contextvars`, capturing `async_task_id` and tracking coroutine pause/resume states (`PY_YIELD` / `PY_RESUME`).
+11. **Multi-layer Data Sanitizer**: Masks sensitive variables (`password`, `token`, `secret`, `api_key`, `credit_card`, `ssn`) and scans values with regex for JWT, AWS keys, and private key PEMs before writing to disk.
+12. **Circuit Breakers & Auto-Timeout**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**. Automatically cleans up stale sessions when targets are not triggered.
+13. **Multi-Session Registry & Active Session Control (`iris_stop_session`)**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices, or actively cancel sessions on demand.
+14. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
 
 ---
 
@@ -276,7 +259,7 @@ Unlike traditional debuggers (`pdb`, `sys.settrace`) which inject 10x–50x slow
 
 ## 🛠️ Core MCP Tools (API Reference)
 
-When connected to any MCP client, the Agent has access to the following 5 tools:
+When connected to any MCP client, the Agent has access to the following 7 tools:
 
 ### 1. `iris_arm_entry`
 Arm an entry point (file and function) for observation with optional predicate conditions.
@@ -291,22 +274,36 @@ Arm an entry point (file and function) for observation with optional predicate c
 Check the status and summary statistics of an observation session.
 - **Parameters:**
   - `session_id` *(string, required)*: Session ID returned by `iris_arm_entry`.
-- **Returns:** `state` (`ARMED`, `TRACING`, `COMPLETED`, `ABORTED_TIMEOUT`, `COMPLETED_TRUNCATED`), `total_events`, start/end timestamps.
+- **Returns:** `state` (`ARMED`, `TRACING`, `COMPLETED`, `ABORTED_TIMEOUT`, `STOPPED`, `COMPLETED_TRUNCATED`), `total_events`, start/end timestamps.
 
-### 3. `iris_diagnose_anomaly`
+### 3. `iris_stop_session`
+Actively terminate an ARMED or TRACING session without waiting for timeout expiration.
+- **Parameters:**
+  - `session_id` *(string, required)*: Session ID to stop.
+- **Returns:** State confirmation (`STOPPED`) and timestamp.
+
+### 4. `iris_trace_data_lineage`
+Trace the empirical causal data lineage graph of a variable across execution lines and versions.
+- **Parameters:**
+  - `value_ref_id` *(string, required)*: Unique ValueRef ID (e.g., `"vref_1a2b3c4d"`).
+  - `direction` *(string, default: "BACKWARD")*: `"BACKWARD"` to find where a bad value originated (root cause), or `"FORWARD"` to see where a value propagated (blast radius).
+  - `depth_limit` *(int, default: 5)*: Maximum causal traversal hops.
+- **Returns:** Nodes, causal edges, epistemic statuses (`Observed`, `Static`, `Inferred`, `Unknown`), and an ASCII DAG flow diagram.
+
+### 5. `iris_diagnose_anomaly`
 Smart diagnosis and event compression engine for rapid LLM reasoning.
 - **Parameters:**
   - `session_id` *(string, required)*: Session ID.
 - **Returns:** Token-efficient markdown report collapsing loops (e.g. 500 iterations ➔ 1 summary), detecting unexpected variable type mutations (e.g. `dict` ➔ `NoneType`), and pinpointing exception root causes.
 
-### 4. `iris_query_call_tree`
+### 6. `iris_query_call_tree`
 Query the hierarchical call tree of functions invoked during the session.
 - **Parameters:**
   - `session_id` *(string, required)*: Session ID.
   - `depth_limit` *(int, default: 2)*: Maximum call depth to return.
 - **Returns:** JSON hierarchy including `function_name`, `file_path`, `execution_id`, and nested `children`.
 
-### 5. `iris_inspect_execution_flow`
+### 7. `iris_inspect_execution_flow`
 Inspect detailed line-by-line execution, source code, and variable mutations.
 - **Parameters:**
   - `execution_id` *(string, required)*: Specific function execution ID from the call tree.
@@ -438,11 +435,9 @@ python -m iris clean --all
 
 ---
 
-## 🧪 Testing & CI/CD
+## 🧪 Testing & Development
 
-Iris is tested continuously across **Linux (Ubuntu)**, **Windows**, and **macOS** on Python **3.12**, **3.13**, and **3.14-dev** via GitHub Actions.
-
-Run the complete automated test suite locally (**24/24 tests passing**):
+Run the complete automated test suite (**33/33 tests passing**):
 ```powershell
 python -m pytest tests/
 ```
@@ -461,6 +456,10 @@ Test suite coverage:
 - `test_fsm_observer.py`: FSM state transitions, PEP 669 line/branch/return events, nested functions, and asyncio tasks.
 - `test_e2e_demo.py`: Complete 6-step flight recording scenario identifying subtle regex bugs.
 - `test_v1_enhancements.py`: Auto-timeout expiry, variable delta isolation, async task ID capture, and database pruning.
+- `test_ast_lineage.py`: Line-level AST dependency analyzer, load/store variable extraction, and operation tags.
+- `test_lineage_storage.py`: Value ref persistence, lineage edge DAG traversal (backward/forward), and database cascade pruning.
+- `test_lineage_e2e.py`: End-to-end causal variable lineage tracking across transformations with ASCII DAG generation.
+- `test_stop_session.py`: Active cancellation of flight recording sessions via FSM `STOPPED` state and MCP `iris_stop_session`.
 
 ---
 
