@@ -9,7 +9,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
   <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/Tests-11%2F11%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-19%2F19%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
 </p>
 
 > **Iris is a flight recorder for Python code.**  
@@ -20,7 +20,7 @@
 ## 📌 Table of Contents
 1. [The Problem Iris Solves](#-the-problem-iris-solves)
 2. [Real-World Case Study: Pallets/Flask](#-real-world-case-study-palletsflask)
-3. [Antigravity Integration (100% Guaranteed Discovery)](#-antigravity-integration-100-guaranteed-discovery)
+3. [AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)](#-ai-agent-integration-antigravity-claude-cursor-windsurf)
 4. [System Architecture](#-system-architecture)
 5. [Key Features](#-key-features)
 6. [Core MCP Tools (API Reference)](#-core-mcp-tools-api-reference)
@@ -97,40 +97,83 @@ python examples/run_realworld_flask_demo.py
 
 ---
 
-## 🚀 Antigravity Integration (100% Guaranteed Discovery)
+## 🚀 AI Agent Integration (Antigravity, Claude, Cursor, Windsurf)
 
-Iris is engineered specifically for **Google Antigravity IDE** to automatically discover and ingest the MCP server upon installation. You can use any of the following 3 setups:
+Iris is built strictly on the open **Model Context Protocol (MCP)** specification over `stdio`. It connects seamlessly to any MCP-compliant AI coding agent:
 
-### Method 1: Direct Clone (Zero-Config)
-The repository includes `.agents/plugins/iris/` and `.agents/mcp_config.json` pre-configured:
-```powershell
-git clone https://github.com/your-org/iris.git
-cd iris
-pip install -e .
-```
-👉 Simply open the `iris` workspace in Antigravity. The agent will **automatically detect the `iris` MCP server** and its 4 tools immediately.
+### 1. Google Antigravity (Zero-Config Discovery)
+Iris includes specialized configurations for **Google Antigravity IDE** to automatically discover and ingest the MCP server:
+
+* **Method 1: Direct Clone (Zero-Config)**
+  ```powershell
+  git clone https://github.com/livia2372005-ops/Iris.git
+  cd Iris
+  pip install -e .
+  ```
+  Simply open this workspace in Antigravity. The agent will **automatically discover the `iris` MCP server** and its 4 tools.
+
+* **Method 2: Setup in Any Existing Project (1-Click Local Setup)**
+  ```powershell
+  pip install iris-flight-recorder
+  iris setup-agent
+  ```
+  Automatically initializes `.agents/plugins/iris/` and maps your current virtual environment interpreter.
+
+* **Method 3: Global Registration (All Workspaces)**
+  ```powershell
+  iris setup-agent --global
+  ```
+  Registers Iris in `~/.gemini/config/mcp_config.json` so every Antigravity project has instant access.
 
 ---
 
-### Method 2: Setup in Any Existing Project (1-Click Local Setup)
-If you are developing your own project (FastAPI, Django, Flask, CLI):
-```powershell
-# 1. Install Iris
-pip install iris-flight-recorder
-
-# 2. Configure Antigravity in your project directory
-iris setup-agent
+### 2. Claude Code & Claude Desktop
+Add Iris to your `claude_desktop_config.json` (or configure via Claude Code CLI):
+```json
+{
+  "mcpServers": {
+    "iris": {
+      "command": "python",
+      "args": ["-m", "iris.mcp.server"]
+    }
+  }
+}
 ```
-This automatically initializes `.agents/plugins/iris/` and maps the exact Python interpreter for Antigravity.
 
 ---
 
-### Method 3: Global Registration (All Workspaces)
-To make Iris available across **every project** you open on your machine:
-```powershell
-iris setup-agent --global
+### 3. Cursor IDE
+Open **Cursor Settings** -> **Features** -> **MCP Servers** -> **Add New MCP Server**:
+- **Name:** `iris`
+- **Type:** `command`
+- **Command:** `python -m iris.mcp.server`
+
+Or add `.cursor/mcp.json` to your workspace root:
+```json
+{
+  "mcpServers": {
+    "iris": {
+      "command": "python",
+      "args": ["-m", "iris.mcp.server"]
+    }
+  }
+}
 ```
-This automatically registers Iris in Antigravity's global configuration (`~/.gemini/config/mcp_config.json`). Any workspace opened in Antigravity will have instant access to Iris tools.
+
+---
+
+### 4. Windsurf, Continue.dev & Roo Code
+Add the standard stdio MCP entry to your client configuration:
+```json
+{
+  "mcpServers": {
+    "iris": {
+      "command": "python",
+      "args": ["-m", "iris.mcp.server"]
+    }
+  }
+}
+```
 
 ---
 
@@ -138,7 +181,7 @@ This automatically registers Iris in Antigravity's global configuration (`~/.gem
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                 AI Coding Agent (Antigravity)               │
+│    AI Coding Agent (Antigravity / Claude Code / Cursor)     │
 └──────────────────────────────┬──────────────────────────────┘
                                │ MCP (JSON-RPC over stdio)
                                ▼
@@ -179,6 +222,9 @@ This automatically registers Iris in Antigravity's global configuration (`~/.gem
 6. **Multi-layer Data Sanitizer**: Masks sensitive variables (`password`, `token`, `secret`, `api_key`, `credit_card`, `ssn`) and scans values with regex for JWT, AWS keys, and private key PEMs before writing to disk.
 7. **Circuit Breakers**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**, preventing disk bloat during runaway loops.
 8. **Auto-Timeout**: Automatically transitions stale sessions to `ABORTED_TIMEOUT` if the target function is not invoked within the timeout window.
+9. **Multi-Session Registry**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices without interference.
+10. **Coroutine Suspension Tracing (`PY_YIELD` / `PY_RESUME`)**: Accurately traces async generators and coroutines pausing on `await` and resuming, isolating execution stacks per task via `contextvars`.
+11. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
 
 ---
 
