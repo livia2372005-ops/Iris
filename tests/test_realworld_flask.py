@@ -32,13 +32,20 @@ def test_trace_realworld_flask():
     print("STEP 2: Running Flask Test Suite via Pytest (without modifying any Flask code)")
     print("=" * 70)
 
-    tutorial_dir = Path("examples/cloned_flask/examples/tutorial").resolve()
+    repo_root = Path(__file__).resolve().parent.parent
+    cloned_flask_dir = repo_root / "examples" / "cloned_flask"
+    tutorial_dir = cloned_flask_dir / "examples" / "tutorial"
     if not tutorial_dir.exists():
         print("Cloning official Pallets/Flask repository for demonstration...")
         subprocess.run(
-            ["git", "clone", "--depth", "1", "https://github.com/pallets/flask.git", "examples/cloned_flask"],
+            ["git", "clone", "--depth", "1", "https://github.com/pallets/flask.git", str(cloned_flask_dir)],
             check=True,
         )
+
+    try:
+        import flask
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "flask"], check=True)
 
     import os
     env = dict(os.environ)

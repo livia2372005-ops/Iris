@@ -1,6 +1,7 @@
 """End-to-End realistic debugging scenario via Iris MCP tools."""
 
 import json
+from pathlib import Path
 import subprocess
 import sys
 from typing import Any, Dict
@@ -70,14 +71,15 @@ def test_e2e_investigation():
         print("=================================================================")
 
         import os
+        repo_root = str(Path(__file__).resolve().parent.parent)
         sub_env = dict(os.environ)
-        sub_env["PYTHONPATH"] = r"d:\App\Iris"
+        sub_env["PYTHONPATH"] = repo_root
 
         app_run = subprocess.run(
             [sys.executable, "examples/chat_service/run_test.py"],
             capture_output=True,
             text=True,
-            cwd=r"d:\App\Iris",
+            cwd=repo_root,
             env=sub_env,
         )
         print(f"[Application Output]:\n{app_run.stdout}")
