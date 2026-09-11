@@ -2,9 +2,10 @@
   <img src="assets/iris_logo.png" alt="Iris Logo" width="480" />
 </p>
 
-<h1 align="center">Iris (v1) — Flight Recorder for CPython via PEP 669 & MCP</h1>
+<h1 align="center">Iris (v2) — Flight Recorder & Causal Data Lineage for CPython</h1>
 
 <p align="center">
+  <a href="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml"><img src="https://github.com/livia2372005-ops/Iris/actions/workflows/ci.yml/badge.svg" alt="CI Matrix"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
@@ -228,6 +229,8 @@ Add the standard stdio MCP entry to your client configuration:
 12. **Circuit Breakers & Auto-Timeout**: Auto-aborts tracing if a session exceeds **500,000 events** or database size reaches **200 MB**. Automatically cleans up stale sessions when targets are not triggered.
 13. **Multi-Session Registry & Active Session Control (`iris_stop_session`)**: Concurrently arm and trace multiple entrypoints across parallel test runners and microservices, or actively cancel sessions on demand.
 14. **Python 3.14+ Ready & C-Extension Compatible**: Powered by a version-aware `MonitoringProvider` supporting directional branch monitoring (`BRANCH_LEFT`/`BRANCH_RIGHT`) and seamlessly tracing boundaries of native C/C++/Rust extensions (NumPy, PyTorch).
+15. **Terminal Boundary Detection & Warnings (`boundary_type`)**: Statically parses statement AST to categorize external calls (`LLM_API` for OpenAI/Anthropic/Gemini, `HTTP_NETWORK` for requests/httpx, `DATABASE_IO` for DB drivers, `EXTERNAL_PROCESS` for subprocesses). Enriches `iris_inspect_execution_flow` with structured boundary notices rather than silently terminating.
+16. **PEP 768 Attach-Mode (`sys.remote_exec`)**: Non-intrusively injects flight recording into running Python processes via `target_pid` on Python 3.14+ (PEP 768) without code changes or restarts, with graceful guidance on Python < 3.14 and remote web app activation via `target_port` probes.
 
 ---
 
@@ -255,6 +258,12 @@ python benchmarks/run_benchmark.py
 
 Unlike traditional debuggers (`pdb`, `sys.settrace`) which inject 10x–50x slowdowns globally across the entire process lifetime, Iris keeps the application running at native speed until the exact target function triggers.
 
+### Real-World Stress Tests & Verification
+Iris has been stress-tested and validated against production-grade Python libraries and architectures:
+- **`Textualize/rich` Rendering Pipeline** (`examples/test_rich_pipeline.py`): Traced across 70,000+ internal events during table and panel formatting. Verified Iris's smart anomaly engine collapsing hundreds of style computation loops into concise LLM summaries with zero event loss.
+- **FastAPI Asynchronous Microservice** (`examples/test_fastapi_microservice.py`): Validated under ASGI middleware on-demand tracing (`X-Iris-Trace`), capturing cross-coroutine async execution and isolating pricing mutation bugs with causal backward lineage in under 250ms.
+- **Pallets/Flask Real-World Test Suite** (`tests/test_realworld_flask.py`): Verified against Flask WSGI routing and request lifecycle execution.
+
 ---
 
 ## 🛠️ Core MCP Tools (API Reference)
@@ -262,13 +271,15 @@ Unlike traditional debuggers (`pdb`, `sys.settrace`) which inject 10x–50x slow
 When connected to any MCP client, the Agent has access to the following 7 tools:
 
 ### 1. `iris_arm_entry`
-Arm an entry point (file and function) for observation with optional predicate conditions.
+Arm an entry point (file and function) for observation with optional predicate conditions and remote attachment.
 - **Parameters:**
   - `entry_file` *(string, required)*: Path or filename of the target script (e.g., `"routes.py"`, `"services/order.py"`).
   - `entry_function` *(string, required)*: Name of the target function (e.g., `"handle_chat"`).
   - `condition` *(string, optional)*: Python expression evaluated against function arguments at entry (e.g., `"user_id == 42 and amount > 500"`). Tracing only triggers when True.
   - `timeout_seconds` *(int, default: 60)*: Maximum duration in seconds to wait for execution.
-- **Returns:** `session_id`, state (`ARMED`), condition, database path.
+  - `target_pid` *(int, optional)*: Process ID of a running Python process to attach to (via PEP 768 `sys.remote_exec` on Python 3.14+).
+  - `target_port` *(int, optional)*: Port of a running web application with Iris middleware installed to trigger via HTTP probe.
+- **Returns:** `session_id`, state (`ARMED`), condition, database path, and attachment status or guidance.
 
 ### 2. `iris_get_session_status`
 Check the status and summary statistics of an observation session.
@@ -304,12 +315,12 @@ Query the hierarchical call tree of functions invoked during the session.
 - **Returns:** JSON hierarchy including `function_name`, `file_path`, `execution_id`, and nested `children`.
 
 ### 7. `iris_inspect_execution_flow`
-Inspect detailed line-by-line execution, source code, and variable mutations.
+Inspect detailed line-by-line execution, source code, variable mutations, and terminal boundaries.
 - **Parameters:**
   - `execution_id` *(string, required)*: Specific function execution ID from the call tree.
   - `limit` *(int, default: 50)*: Number of events per page.
   - `cursor` *(int, default: 0)*: Sequence number offset for pagination.
-- **Returns:** Ordered event stream (`LINE`, `BRANCH`, `RETURN`, `EXCEPTION`), resolved `source_line`, and `payload.delta`.
+- **Returns:** Ordered event stream (`LINE`, `BRANCH`, `RETURN`, `EXCEPTION`), resolved `source_line`, `payload.delta`, and `boundaries_detected` (flagging `LLM_API`, `HTTP_NETWORK`, `DATABASE_IO`, `EXTERNAL_PROCESS` calls with proactive boundary notices).
 
 ---
 
