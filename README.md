@@ -9,7 +9,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%202.x-green.svg" alt="Protocol: MCP"></a>
   <a href="https://peps.python.org/pep-0669/"><img src="https://img.shields.io/badge/Engine-PEP%20669-orange.svg" alt="Engine: PEP 669"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/Tests-33%2F33%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/Tests-41%2F41%20Passing-brightgreen.svg" alt="Tests: Passing"></a>
 </p>
 
 > **Iris is a flight recorder for Python code.**  
@@ -437,7 +437,7 @@ python -m iris clean --all
 
 ## 🧪 Testing & Development
 
-Run the complete automated test suite (**33/33 tests passing**):
+Run the complete automated test suite (**41/41 tests passing**):
 ```powershell
 python -m pytest tests/
 ```
@@ -460,6 +460,8 @@ Test suite coverage:
 - `test_lineage_storage.py`: Value ref persistence, lineage edge DAG traversal (backward/forward), and database cascade pruning.
 - `test_lineage_e2e.py`: End-to-end causal variable lineage tracking across transformations with ASCII DAG generation.
 - `test_stop_session.py`: Active cancellation of flight recording sessions via FSM `STOPPED` state and MCP `iris_stop_session`.
+- `test_boundary_detection.py`: Terminal boundary detection (`LLM_API`, `HTTP_NETWORK`, `DATABASE_IO`, `EXTERNAL_PROCESS`) and execution flow enrichment.
+- `test_pep768_remote.py`: PEP 768 `sys.remote_exec` attach-mode, remote port HTTP probe triggering, and Python < 3.14 fallback guidance.
 
 ---
 

@@ -33,6 +33,8 @@ def create_server() -> MCPServer:
         description=(
             "Arm an entry point (file and function) for observation. "
             "Supports optional predicate condition evaluated at function entry (PY_START). "
+            "Supports remote process attachment via PEP 768 sys.remote_exec (target_pid on Python 3.14+) "
+            "or middleware probe trigger (target_port). "
             "When the target application or test reaches this entry point, "
             "Iris will record the execution tree without pausing execution."
         ),
@@ -42,6 +44,8 @@ def create_server() -> MCPServer:
         entry_function: str,
         condition: Optional[str] = None,
         timeout_seconds: int = 60,
+        target_pid: Optional[int] = None,
+        target_port: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Arm an entry point for tracing.
 
@@ -50,6 +54,8 @@ def create_server() -> MCPServer:
             entry_function: Name of the target entry function (e.g. 'handle_chat').
             condition: Optional Python expression evaluated against function arguments (e.g. 'user_id == 42').
             timeout_seconds: Maximum duration in seconds to wait for entry trigger.
+            target_pid: Optional PID of a running Python process to attach via PEP 768 (Python 3.14+).
+            target_port: Optional TCP port of a web application running with Iris middleware.
 
         Returns:
             Dict containing session_id, state ('ARMED'), and target details.
@@ -62,21 +68,46 @@ def create_server() -> MCPServer:
             entry_function=entry_function,
             condition=condition,
             timeout_seconds=timeout_seconds,
+            target_pid=target_pid,
+            target_port=target_port,
         )
-        return {
+
+        remote_info: Optional[Dict[str, Any]] = None
+        if target_pid is not None:
+            from iris.core.remote import attach_remote_pid
+            remote_info = attach_remote_pid(target_pid, session_id)
+        elif target_port is not None:
+            from iris.core.remote import attach_remote_port
+            remote_info = attach_remote_port(target_port, session_id, entry_file, entry_function, condition)
+
+        response: Dict[str, Any] = {
             "session_id": session_id,
             "entry_file": entry_file,
             "entry_function": entry_function,
             "condition": condition,
             "state": "ARMED",
             "timeout_seconds": timeout_seconds,
+            "target_pid": target_pid,
+            "target_port": target_port,
             "database_path": str(get_db_path()),
-            "message": (
-                f"Session '{session_id}' is now ARMED for {entry_function} in {entry_file}"
-                + (f" with condition [{condition}]." if condition else ".")
-                + " Trigger your application or test suite now."
-            ),
         }
+
+        if remote_info:
+            response["remote_attachment"] = remote_info
+            if not remote_info.get("success"):
+                response["warning"] = remote_info.get("error")
+
+        msg = f"Session '{session_id}' is now ARMED for {entry_function} in {entry_file}"
+        if condition:
+            msg += f" with condition [{condition}]"
+        if target_pid:
+            msg += f" (targeted PID: {target_pid})"
+        elif target_port:
+            msg += f" (targeted Port: {target_port})"
+        msg += ". Trigger your application or test suite now."
+        response["message"] = msg
+
+        return response
 
     @server.tool(
         name="iris_get_session_status",

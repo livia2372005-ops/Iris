@@ -56,7 +56,9 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     timeout_seconds INTEGER DEFAULT 60,
                     start_time_mono_ns INTEGER,
                     end_time_mono_ns INTEGER,
-                    total_events INTEGER DEFAULT 0
+                    total_events INTEGER DEFAULT 0,
+                    target_pid INTEGER,
+                    target_port INTEGER
                 );
 
                 CREATE TABLE IF NOT EXISTS executions (
@@ -131,6 +133,14 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 conn.execute("ALTER TABLE sessions ADD COLUMN condition TEXT")
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute("ALTER TABLE sessions ADD COLUMN target_pid INTEGER")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE sessions ADD COLUMN target_port INTEGER")
+            except sqlite3.OperationalError:
+                pass
     finally:
         conn.close()
 
@@ -141,6 +151,8 @@ def arm_session(
     entry_function: str,
     condition: Optional[str] = None,
     timeout_seconds: int = 60,
+    target_pid: Optional[int] = None,
+    target_port: Optional[int] = None,
     db_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Store an ARMED session record in SQLite with condition, creation time, and timeout."""
@@ -153,10 +165,11 @@ def arm_session(
                 """
                 INSERT OR REPLACE INTO sessions (
                     session_id, entry_file, entry_function, condition, state,
-                    created_at_mono_ns, timeout_seconds, total_events
-                ) VALUES (?, ?, ?, ?, 'ARMED', ?, ?, 0)
+                    created_at_mono_ns, timeout_seconds, total_events,
+                    target_pid, target_port
+                ) VALUES (?, ?, ?, ?, 'ARMED', ?, ?, 0, ?, ?)
                 """,
-                (session_id, entry_file, entry_function, condition, now_mono, timeout_seconds),
+                (session_id, entry_file, entry_function, condition, now_mono, timeout_seconds, target_pid, target_port),
             )
         return {
             "session_id": session_id,
@@ -165,6 +178,8 @@ def arm_session(
             "condition": condition,
             "state": "ARMED",
             "timeout_seconds": timeout_seconds,
+            "target_pid": target_pid,
+            "target_port": target_port,
         }
     finally:
         conn.close()
@@ -182,7 +197,8 @@ def get_session(
             """
             SELECT session_id, entry_file, entry_function, condition, state,
                    created_at_mono_ns, timeout_seconds,
-                   start_time_mono_ns, end_time_mono_ns, total_events
+                   start_time_mono_ns, end_time_mono_ns, total_events,
+                   target_pid, target_port
             FROM sessions
             WHERE session_id = ?
             """,
@@ -407,14 +423,37 @@ def inspect_execution_flow(
             if include_source and file_path and ev.get("line_number"):
                 ev["source_line"] = SourceResolver.resolve_line(file_path, ev["line_number"])
 
+            # Feature 13.5: Terminal Boundary Warning
+            if file_path and ev.get("line_number"):
+                try:
+                    from iris.analysis.ast_lineage import ASTLineageAnalyzer
+                    line_info = ASTLineageAnalyzer.get_line_info(file_path, ev["line_number"])
+                    if line_info and line_info.boundary_type:
+                        ev["boundary_type"] = line_info.boundary_type
+                        ev["boundary_target"] = line_info.boundary_target
+                        ev["boundary_notice"] = line_info.boundary_notice
+                except Exception:
+                    pass
+
             events.append(ev)
 
         has_more = len(rows) > limit
         next_cursor = rows[limit]["sequence_number"] if has_more else None
 
+        boundaries_detected = [
+            {
+                "line": ev["line_number"],
+                "boundary_type": ev["boundary_type"],
+                "boundary_target": ev.get("boundary_target"),
+                "boundary_notice": ev.get("boundary_notice"),
+            }
+            for ev in events if ev.get("boundary_type")
+        ]
+
         return {
             "execution": ex_meta,
             "events": events,
+            "boundaries_detected": boundaries_detected,
             "has_more": has_more,
             "next_cursor": next_cursor,
         }

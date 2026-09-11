@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 from iris.storage.resolver import SourceResolver
 
@@ -17,6 +17,9 @@ class LineCausalInfo:
     read_vars: Set[str] = field(default_factory=set)
     written_vars: Set[str] = field(default_factory=set)
     operation: str = "assign"
+    boundary_type: Optional[str] = None
+    boundary_target: Optional[str] = None
+    boundary_notice: Optional[str] = None
 
 
 class ASTLineageAnalyzer:
@@ -101,11 +104,84 @@ class ASTLineageAnalyzer:
             elif isinstance(node, ast.Return) and node.value:
                 for l in range(lineno, end_lineno + 1):
                     line_map[l].operation = "return"
+            elif isinstance(node, ast.Call):
+                boundary = cls._detect_boundary(node.func)
+                if boundary:
+                    b_type, b_target, b_notice = boundary
+                    for l in range(lineno, end_lineno + 1):
+                        if l in line_map:
+                            line_map[l].boundary_type = b_type
+                            line_map[l].boundary_target = b_target
+                            line_map[l].boundary_notice = b_notice
 
         if norm_path:
             cls._cache[norm_path] = line_map
 
         return line_map
+
+    @staticmethod
+    def _resolve_dotted_name(node: ast.AST) -> str:
+        """Extract full dotted attribute name (e.g. client.chat.completions.create)."""
+        parts = []
+        curr = node
+        while isinstance(curr, ast.Attribute):
+            parts.append(curr.attr)
+            curr = curr.value
+        if isinstance(curr, ast.Name):
+            parts.append(curr.id)
+        return ".".join(reversed(parts))
+
+    @classmethod
+    def _detect_boundary(cls, func_node: ast.AST) -> Optional[Tuple[str, str, str]]:
+        """Identify if a function call targets an external terminal boundary."""
+        dotted = cls._resolve_dotted_name(func_node)
+        if not dotted:
+            return None
+
+        lower = dotted.lower()
+
+        # 1. LLM API Boundary
+        llm_providers = ("openai", "anthropic", "genai", "generativeai", "langchain", "litellm", "cohere", "groq", "mistralai", "ollama")
+        llm_methods = ("completions.create", "messages.create", "generate_content", "ainvoke", "invoke", "chat_completion")
+        if any(prov in lower for prov in llm_providers) or any(meth in lower for meth in llm_methods):
+            return (
+                "LLM_API",
+                dotted,
+                "Terminal boundary reached: Invocation of external LLM API service. Execution leaves CPython runtime into external provider network."
+            )
+
+        # 2. HTTP Network Boundary
+        http_modules = ("requests.", "httpx.", "aiohttp.", "urllib.request.", "urllib3.")
+        http_methods = ("requests.get", "requests.post", "requests.put", "requests.delete", "requests.patch", "requests.request",
+                        "httpx.get", "httpx.post", "httpx.put", "httpx.delete", "httpx.patch", "httpx.request",
+                        "urllib.request.urlopen")
+        if lower.startswith(http_modules) or any(lower == hm for hm in http_methods):
+            return (
+                "HTTP_NETWORK",
+                dotted,
+                "Terminal boundary reached: Outbound HTTP network request. Execution waits on external remote endpoint."
+            )
+
+        # 3. Database IO Boundary
+        db_modules = ("sqlite3.", "psycopg.", "psycopg2.", "asyncpg.", "pymongo.", "redis.")
+        db_methods = (".execute", ".executemany", ".fetchall", ".fetchone", ".commit", "session.query", "session.execute")
+        if lower.startswith(db_modules) or any(lower.endswith(dm) or dm in lower for dm in db_methods):
+            return (
+                "DATABASE_IO",
+                dotted,
+                "Terminal boundary reached: Database storage I/O operation. Execution enters database driver engine."
+            )
+
+        # 4. External OS Process Boundary
+        proc_modules = ("subprocess.run", "subprocess.popen", "subprocess.check_output", "subprocess.call", "os.system", "os.popen")
+        if any(lower.startswith(pm) for pm in proc_modules):
+            return (
+                "EXTERNAL_PROCESS",
+                dotted,
+                "Terminal boundary reached: Spawning external OS subprocess. Execution controlled by operating system process."
+            )
+
+        return None
 
     @staticmethod
     def _determine_op(val_node: ast.AST) -> str:
